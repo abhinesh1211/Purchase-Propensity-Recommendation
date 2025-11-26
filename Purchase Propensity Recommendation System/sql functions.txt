@@ -1,0 +1,51 @@
+Funnel counts (Visited → Viewed → AddToCart → Purchase) per day
+
+WITH daily AS (
+  SELECT
+    DATE(event_time) AS day,
+    SUM(CASE WHEN event_type='visit' THEN 1 ELSE 0 END) AS visits,
+    SUM(CASE WHEN event_type='view' THEN 1 ELSE 0 END) AS views,
+    SUM(CASE WHEN event_type='add_to_cart' THEN 1 ELSE 0 END) AS add_to_carts,
+    SUM(CASE WHEN event_type='purchase' THEN 1 ELSE 0 END) AS purchases
+  FROM events
+  GROUP BY 1
+)
+SELECT * FROM daily ORDER BY day DESC;
+
+Top products that convert (conversion rate by product):
+WITH last AS (
+  SELECT user_id, MAX(event_time) AS last_event
+  FROM events
+  GROUP BY user_id
+),
+purchases AS (
+  SELECT user_id, COUNT(*) AS frequency, SUM(price) AS monetary
+  FROM events WHERE event_type='purchase' GROUP BY user_id
+),
+first_event AS (
+  SELECT user_id, MIN(event_time) as first_event FROM events GROUP BY user_id
+)
+SELECT
+  p.user_id,
+  DATEDIFF(day, l.last_event, CURRENT_DATE) AS recency,
+  p.frequency,
+  p.monetary
+FROM purchases p
+JOIN last l ON p.user_id = l.user_id;
+
+
+RFM calculation per user:
+
+WITH product_actions AS (
+  SELECT
+    product_id,
+    SUM(CASE WHEN event_type='view' THEN 1 ELSE 0 END) AS views,
+    SUM(CASE WHEN event_type='purchase' THEN 1 ELSE 0 END) AS purchases
+  FROM events
+  GROUP BY product_id
+)
+SELECT product_id, purchases, views,
+       CASE WHEN views=0 THEN 0 ELSE purchases*1.0/views END as conversion_rate
+FROM product_actions
+ORDER BY conversion_rate DESC
+LIMIT 50;
